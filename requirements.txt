@@ -1,0 +1,15 @@
+# Web Scraping
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# Image Processing & Hashing
+Pillow==10.2.0
+
+# Timezone Support
+pytz==2024.1
+
+# Database (SQLite는 Python 기본 내장)

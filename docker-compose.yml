@@ -1,0 +1,25 @@
+services:
+  dumpcache-crawler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dumpcache-crawler
+    restart: unless-stopped
+
+    # 환경 변수 파일 로드
+    env_file:
+      - .env
+
+    # 볼륨 마운트 (호스트:컨테이너)
+    volumes:
+      - ./data:/app/data
+
+    # 로그 설정
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 네트워크 설정
+    network_mode: bridge
