@@ -78,9 +78,9 @@
 
 ## 🔗 Links
 
-- **GitHub Repository**: https://github.com/igor0670/dumpcache
+- **GitHub Repository**: https://github.com/HelloJamong/DumpCache
 - **Docker Hub**: https://hub.docker.com/r/igor0670/dumpcache
-- **Latest Release**: https://github.com/igor0670/dumpcache/releases/latest
+- **Latest Release**: https://github.com/HelloJamong/DumpCache/releases/latest
 
-[1.0.1]: https://github.com/igor0670/dumpcache/releases/tag/v1.0.1
-[1.0.0]: https://github.com/igor0670/dumpcache/releases/tag/v1.0.0
+[1.0.1]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.1
+[1.0.0]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.0

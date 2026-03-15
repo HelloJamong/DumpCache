@@ -10,13 +10,13 @@
 
 ```bash
 # 최신 버전 자동 다운로드
-curl -L -O https://github.com/igor0670/dumpcache/releases/latest/download/docker-compose.yml
-curl -L -O https://github.com/igor0670/dumpcache/releases/latest/download/default.env.example
+curl -L -O https://github.com/HelloJamong/DumpCache/releases/latest/download/docker-compose.yml
+curl -L -O https://github.com/HelloJamong/DumpCache/releases/latest/download/default.env.example
 
-# 또는 특정 버전 다운로드 (버전 확인: https://github.com/igor0670/dumpcache/releases)
+# 또는 특정 버전 다운로드 (버전 확인: https://github.com/HelloJamong/DumpCache/releases)
 # VERSION=v1.0.1
-# curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/docker-compose.yml
-# curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/default.env.example
+# curl -L -O https://github.com/HelloJamong/DumpCache/releases/download/${VERSION}/docker-compose.yml
+# curl -L -O https://github.com/HelloJamong/DumpCache/releases/download/${VERSION}/default.env.example
 
 # 데이터 디렉토리 생성
 mkdir -p data/images
@@ -40,8 +40,8 @@ docker compose logs -f
 
 ```bash
 # 저장소 클론
-git clone https://github.com/igor0670/dumpcache.git
-cd dumpcache
+git clone https://github.com/HelloJamong/DumpCache.git
+cd DumpCache
 
 # .env 파일 생성 및 설정
 cp default.env.example .env
