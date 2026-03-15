@@ -1,8 +1,16 @@
+# Docker Compose 설정 파일
+#
+# Docker Compose v1과 v2 모두 호환됩니다:
+# - v2 (권장): docker compose up -d
+# - v1 (레거시): docker-compose up -d
+#
+# Synology NAS 등 v1만 지원하는 환경에서도 동일하게 작동합니다.
+
+version: '3.8'
+
 services:
   dumpcache-crawler:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: igor0670/dumpcache:latest
     container_name: dumpcache-crawler
     restart: unless-stopped
 

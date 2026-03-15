@@ -1,14 +1,35 @@
 # Changelog
 
+## [1.0.2] - 2026-03-15
+
+### Changed
+- GitHub 저장소 주소 업데이트: `igor0670/dumpcache` → `HelloJamong/DumpCache`
+  - README, CHANGELOG, 워크플로우 전체 URL 변경
+  - Docker Hub는 `igor0670/dumpcache` 유지
+- Docker Compose v1/v2 호환성 개선
+  - `version: '3.8'` 명시로 v1 환경(Synology NAS 등) 지원
+  - README에 v1/v2 명령어 옵션 추가
+  - docker-compose.yml에 호환성 안내 주석 추가
+
+### Removed
+- `docker-compose.dev.yml` 제거
+  - 단일 `docker-compose.yml`로 통합 (Docker Hub 이미지 사용)
+  - 로컬 개발은 `docker build` 명령어 사용으로 단순화
+
 ## [1.0.1] - 2026-03-15
 
 ### Changed
 - 환경 변수 예시 파일명 변경: `.env.example` → `default.env.example`
   - 더 명확한 파일명으로 사용자 혼동 방지
   - README 및 릴리즈 노트 전체 업데이트
+- Docker Compose 설정 단순화
+  - `docker-compose.yml`: Docker Hub 이미지 사용 (즉시 실행 가능)
+  - 개발자는 `docker build` 명령어로 로컬 빌드 가능
+  - GitHub Release 다운로드 시 즉시 실행 가능
 
 ### Fixed
 - GitHub Actions 권한 설정 추가 (릴리즈 생성 실패 해결)
+- GitHub Release로 설치 시 Dockerfile 없어서 빌드 실패하는 문제 해결
 
 ## [1.0.0] - 2026-03-15
 
@@ -82,5 +103,6 @@
 - **Docker Hub**: https://hub.docker.com/r/igor0670/dumpcache
 - **Latest Release**: https://github.com/HelloJamong/DumpCache/releases/latest
 
+[1.0.2]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.2
 [1.0.1]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.1
 [1.0.0]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.0
