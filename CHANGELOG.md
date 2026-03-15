@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1] - 2026-03-15
+
+### Changed
+- 환경 변수 예시 파일명 변경: `.env.example` → `default.env.example`
+  - 더 명확한 파일명으로 사용자 혼동 방지
+  - README 및 릴리즈 노트 전체 업데이트
+
+### Fixed
+- GitHub Actions 권한 설정 추가 (릴리즈 생성 실패 해결)
+
 ## [1.0.0] - 2026-03-15
 
 ### Added
@@ -72,4 +82,5 @@
 - **Docker Hub**: https://hub.docker.com/r/igor0670/dumpcache
 - **Latest Release**: https://github.com/igor0670/dumpcache/releases/latest
 
+[1.0.1]: https://github.com/igor0670/dumpcache/releases/tag/v1.0.1
 [1.0.0]: https://github.com/igor0670/dumpcache/releases/tag/v1.0.0

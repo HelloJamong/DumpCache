@@ -9,18 +9,20 @@
 최신 릴리즈에서 필요한 파일을 다운로드하여 바로 실행할 수 있습니다.
 
 ```bash
-# 최신 릴리즈 버전 확인: https://github.com/igor0670/dumpcache/releases
+# 최신 버전 자동 다운로드
+curl -L -O https://github.com/igor0670/dumpcache/releases/latest/download/docker-compose.yml
+curl -L -O https://github.com/igor0670/dumpcache/releases/latest/download/default.env.example
 
-# 필요한 파일 다운로드 (버전에 맞게 수정)
-VERSION=v1.0.0
-curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/docker-compose.yml
-curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/.env.example
+# 또는 특정 버전 다운로드 (버전 확인: https://github.com/igor0670/dumpcache/releases)
+# VERSION=v1.0.1
+# curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/docker-compose.yml
+# curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/default.env.example
 
 # 데이터 디렉토리 생성
 mkdir -p data/images
 
 # .env 파일 생성 및 설정
-cp .env.example .env
+cp default.env.example .env
 nano .env  # 갤러리 URL 등 필수 설정 입력
 
 # 실행
@@ -42,7 +44,7 @@ git clone https://github.com/igor0670/dumpcache.git
 cd dumpcache
 
 # .env 파일 생성 및 설정
-cp .env.example .env
+cp default.env.example .env
 nano .env  # 갤러리 URL 등 필수 설정 입력
 
 # 실행
@@ -76,7 +78,7 @@ DumpCache/
 │   ├── images/          # 다운로드된 이미지 저장 (볼륨 마운트)
 │   └── metadata.db      # 수집 이력 데이터베이스
 ├── .env                 # 환경 설정 파일 (직접 작성)
-├── .env.example         # 환경 설정 템플릿
+├── default.env.example         # 환경 설정 템플릿
 ├── docker-compose.yml   # Docker Compose 설정
 └── crawler.py           # 크롤러 메인 코드
 ```

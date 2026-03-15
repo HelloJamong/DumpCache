@@ -89,13 +89,13 @@ jobs:
             ```bash
             # 필요한 파일 다운로드
             curl -L -O https://github.com/igor0670/dumpcache/releases/download/${{ steps.get_version.outputs.tag }}/docker-compose.yml
-            curl -L -O https://github.com/igor0670/dumpcache/releases/download/${{ steps.get_version.outputs.tag }}/.env.example
+            curl -L -O https://github.com/igor0670/dumpcache/releases/download/${{ steps.get_version.outputs.tag }}/default.env.example
 
             # 데이터 디렉토리 생성
             mkdir -p data/images
 
             # .env 파일 생성 및 설정
-            cp .env.example .env
+            cp default.env.example .env
             nano .env  # 또는 vi .env
 
             # 실행
@@ -106,7 +106,7 @@ jobs:
             ```
           files: |
             docker-compose.yml
-            .env.example
+            default.env.example
           draft: false
           prerelease: false
         env:
