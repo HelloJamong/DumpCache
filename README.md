@@ -100,11 +100,28 @@ docker compose down --rmi all
 docker compose down -v
 ```
 
+## 🧪 테스트
+
+크롤러를 실행하기 전에 설정이 올바른지 검증할 수 있습니다.
+
+```bash
+# 통합 검증 테스트 실행
+docker compose run --rm dumpcache-crawler python test_crawler.py
+```
+
+**검증 항목:**
+- ✅ 공지사항/광고/설문 필터링
+- ✅ 이미지/영상 포함 여부 검출
+- ✅ 게시글 파싱 정상 작동
+
+테스트는 `.env` 파일의 `GALLERY_URL` 설정을 사용합니다.
+
 ## 🐛 문제 해결
 
 ### 이미지가 다운로드되지 않아요
 - `.env` 파일에서 `GALLERY_URL`이 올바른지 확인하세요
-- 로그를 확인하여 에러 메시지를 확인하세요: `docker-compose logs -f`
+- 로그를 확인하여 에러 메시지를 확인하세요: `docker compose logs -f`
+- 테스트 스크립트로 검증하세요: `docker compose run --rm dumpcache-crawler python test_crawler.py`
 
 ### 컨테이너가 계속 재시작돼요
 - 갤러리 URL이 잘못되었거나 접근할 수 없는 경우일 수 있습니다
