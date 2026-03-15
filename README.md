@@ -4,37 +4,67 @@
 
 ## 🚀 빠른 시작
 
-### 1. 환경 설정
+### 방법 1: GitHub Release 사용 (권장)
 
-`.env.example` 파일을 `.env`로 복사하고 설정을 입력합니다.
+최신 릴리즈에서 필요한 파일을 다운로드하여 바로 실행할 수 있습니다.
 
 ```bash
+# 최신 릴리즈 버전 확인: https://github.com/igor0670/dumpcache/releases
+
+# 필요한 파일 다운로드 (버전에 맞게 수정)
+VERSION=v1.0.0
+curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/docker-compose.yml
+curl -L -O https://github.com/igor0670/dumpcache/releases/download/${VERSION}/.env.example
+
+# 데이터 디렉토리 생성
+mkdir -p data/images
+
+# .env 파일 생성 및 설정
 cp .env.example .env
-```
+nano .env  # 갤러리 URL 등 필수 설정 입력
 
-`.env` 파일을 편집기로 열어서 설정을 수정합니다:
-
-```bash
-nano .env
-# 또는
-vim .env
-# 또는 VSCode 등 원하는 에디터 사용
-```
-
-**필수 설정:**
-- `GALLERY_URL`: 수집할 갤러리 주소 (전체 URL 복사-붙여넣기)
-- `CRAWL_INTERVAL`: 수집 간격 (초 단위, 기본값: 60)
-
-### 2. Docker 컨테이너 실행
-
-```bash
-# 백그라운드로 실행
+# 실행
 docker compose up -d
 
 # 로그 확인
 docker compose logs -f
+```
 
-# 중지
+**필수 설정 (`.env` 파일):**
+- `GALLERY_URL`: 수집할 갤러리 주소 (전체 URL 복사-붙여넣기)
+- `CRAWL_INTERVAL`: 수집 간격 (초 단위, 기본값: 60)
+
+### 방법 2: 저장소 클론
+
+```bash
+# 저장소 클론
+git clone https://github.com/igor0670/dumpcache.git
+cd dumpcache
+
+# .env 파일 생성 및 설정
+cp .env.example .env
+nano .env  # 갤러리 URL 등 필수 설정 입력
+
+# 실행
+docker compose up -d
+
+# 로그 확인
+docker compose logs -f
+```
+
+### Docker Hub에서 이미지 직접 사용
+
+```bash
+# 최신 버전
+docker pull igor0670/dumpcache:latest
+
+# 특정 버전
+docker pull igor0670/dumpcache:v1.0.0
+```
+
+### 중지
+
+```bash
 docker compose down
 ```
 
