@@ -3,6 +3,24 @@
 > 버전 형식: `YY.메이저.마이너` (연도 두 자리 · 기능 추가 시 메이저 · 버그/내부 수정 시 마이너).
 > 태그명은 버전과 동일하며 `v` 접두사를 붙이지 않는다.
 
+## [26.2.0] - 2026-08-29
+
+### Added
+- 새 게시글만 수집 (이미 처리한 게시글 자동 건너뛰기)
+  - `processed_posts` 테이블에 `(갤러리 ID, 게시글 ID)` 단위로 처리 이력 기록
+  - 매 사이클 목록을 다시 훑되 신규 게시글만 다운로드 → 요청량·중복 처리 감소
+  - `MAX_POSTS_PER_CYCLE`은 이제 "사이클당 새 게시글 수" 기준
+  - 게시글 페이지 로딩 실패 시에는 기록하지 않고 다음 사이클에 재시도
+- 멀티 갤러리 모드 (최대 3개 동시 수집)
+  - `MULTI_MODE` (기본 `False`), `MULTI_GALLERY_COUNT` (`2` 또는 `3`)
+  - 갤러리 주소는 `GALLERY_URL`(1번) + `GALLERY_URL_2` + `GALLERY_URL_3`
+  - 갤러리 간 랜덤 지연 추가
+- 이미지를 `images/<갤러리명>/` 하위 폴더에 갤러리별로 분리 저장 (단일·멀티 공통)
+  - 갤러리명은 목록 페이지에서 추출, 실패 시 갤러리 ID로 대체
+
+### Changed
+- `test_crawler.py`가 설정된 모든 갤러리를 순회하며 검증
+
 ## [26.1.0] - 2026-08-29
 
 ### Added
@@ -130,6 +148,7 @@
 - **Docker Hub**: https://hub.docker.com/r/igor0670/dumpcache
 - **Latest Release**: https://github.com/HelloJamong/DumpCache/releases/latest
 
+[26.2.0]: https://github.com/HelloJamong/DumpCache/releases/tag/26.2.0
 [26.1.0]: https://github.com/HelloJamong/DumpCache/releases/tag/26.1.0
 [1.0.2]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.2
 [1.0.1]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.1

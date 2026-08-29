@@ -4,6 +4,7 @@ DumpCache - Community Gallery Image Crawler
 """
 
 import os
+import re
 import sys
 import random
 import signal
@@ -44,18 +45,38 @@ def _handle_stop(signum, frame):
 class Config:
     """환경 변수 기반 설정"""
     GALLERY_URL = os.getenv('GALLERY_URL', '')
+    GALLERY_URL_2 = os.getenv('GALLERY_URL_2', '')
+    GALLERY_URL_3 = os.getenv('GALLERY_URL_3', '')
+    MULTI_MODE = os.getenv('MULTI_MODE', 'False').lower() == 'true'
+    MULTI_GALLERY_COUNT = int(os.getenv('MULTI_GALLERY_COUNT', '2'))
     CRAWL_INTERVAL = int(os.getenv('CRAWL_INTERVAL', '60'))
     IMAGE_SAVE_PATH = os.getenv('IMAGE_SAVE_PATH', '/app/data/images')
     METADATA_DB_PATH = os.getenv('METADATA_DB_PATH', '/app/data/metadata.db')
     MAX_POSTS_PER_CYCLE = int(os.getenv('MAX_POSTS_PER_CYCLE', '10'))
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
+    _PLACEHOLDER = '갤러리 주소 입력'
+
+    @classmethod
+    def gallery_urls(cls) -> List[str]:
+        """수집 대상 갤러리 URL 목록 (단일 모드는 1개, 멀티 모드는 2~3개)"""
+        if not cls.MULTI_MODE:
+            return [cls.GALLERY_URL]
+        count = min(max(cls.MULTI_GALLERY_COUNT, 2), 3)
+        return [cls.GALLERY_URL, cls.GALLERY_URL_2, cls.GALLERY_URL_3][:count]
+
     @classmethod
     def validate(cls):
         """필수 설정 검증"""
-        if not cls.GALLERY_URL or cls.GALLERY_URL == '갤러리 주소 입력':
-            logger.error("GALLERY_URL이 설정되지 않았습니다. .env 파일을 확인하세요.")
+        if cls.MULTI_MODE and cls.MULTI_GALLERY_COUNT not in (2, 3):
+            logger.error("MULTI_GALLERY_COUNT는 2 또는 3이어야 합니다.")
             sys.exit(1)
+
+        for idx, url in enumerate(cls.gallery_urls(), 1):
+            if not url or url == cls._PLACEHOLDER:
+                var = 'GALLERY_URL' if idx == 1 else f'GALLERY_URL_{idx}'
+                logger.error(f"{var}이(가) 설정되지 않았습니다. .env 파일을 확인하세요.")
+                sys.exit(1)
 
 
 class BotBlockBypass:
@@ -189,6 +210,21 @@ class GalleryParser:
         logger.info(f"갤러리 파싱 완료: 타입={gallery_type}, ID={gallery_id}")
         return gallery_type, gallery_id, base_url
 
+    @staticmethod
+    def extract_name(soup: BeautifulSoup, fallback: str) -> str:
+        """갤러리 목록 페이지에서 갤러리 표시 이름 추출 (실패 시 fallback=갤러리 ID)"""
+        el = soup.select_one("div.page_head h2 a")
+        name = el.get_text(strip=True) if el else ""
+        if not name:
+            meta = soup.select_one('meta[property="og:title"]')
+            if meta and meta.get("content"):
+                name = meta["content"].split(" - ")[0].strip()
+        if not name:
+            return fallback
+        # ponytail: 파일 경로로 못 쓰는 문자만 제거, 한글/공백은 유지
+        name = re.sub(r'[/\\\x00]', '', name).strip(' .')
+        return name or fallback
+
 
 class Database:
     """SQLite 데이터베이스 관리"""
@@ -225,6 +261,16 @@ class Database:
                 posts_found INTEGER DEFAULT 0,
                 images_downloaded INTEGER DEFAULT 0,
                 errors INTEGER DEFAULT 0
+            )
+        ''')
+
+        # processed_posts 테이블 (게시글 단위 중복 방지 - 새 게시글만 수집)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS processed_posts (
+                gallery_id TEXT NOT NULL,
+                post_id TEXT NOT NULL,
+                processed_at TEXT NOT NULL,
+                PRIMARY KEY (gallery_id, post_id)
             )
         ''')
 
@@ -268,6 +314,27 @@ class Database:
             INSERT INTO crawl_history (crawled_at, posts_found, images_downloaded, errors)
             VALUES (?, ?, ?, ?)
         ''', (datetime.now().isoformat(), posts_found, images_downloaded, errors))
+        conn.commit()
+        conn.close()
+
+    def is_post_processed(self, gallery_id: str, post_id: str) -> bool:
+        """게시글이 이전 사이클에서 이미 처리되었는지 확인"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT 1 FROM processed_posts WHERE gallery_id = ? AND post_id = ?',
+                       (gallery_id, post_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result is not None
+
+    def mark_post_processed(self, gallery_id: str, post_id: str):
+        """게시글을 처리 완료로 기록"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR IGNORE INTO processed_posts (gallery_id, post_id, processed_at)
+            VALUES (?, ?, ?)
+        ''', (gallery_id, post_id, datetime.now().isoformat()))
         conn.commit()
         conn.close()
 
@@ -383,15 +450,23 @@ class ImageDownloader:
             return False
 
 
+class Gallery:
+    """단일 갤러리 상태. 다운로더는 첫 크롤에서 갤러리명을 확인한 뒤 생성한다."""
+
+    def __init__(self, url: str):
+        self.type, self.id, self.base_url = GalleryParser.parse_url(url)
+        self.name: Optional[str] = None
+        self.downloader: Optional[ImageDownloader] = None
+
+
 class GalleryCrawler:
     """갤러리 크롤러 메인 클래스"""
 
     def __init__(self):
         Config.validate()
 
-        self.gallery_type, self.gallery_id, self.base_url = GalleryParser.parse_url(Config.GALLERY_URL)
         self.db = Database(Config.METADATA_DB_PATH)
-        self.downloader = ImageDownloader(Config.IMAGE_SAVE_PATH, self.db)
+        self.galleries = [Gallery(url) for url in Config.gallery_urls()]
 
         # 종료 신호(SIGTERM: docker stop, SIGINT: Ctrl-C) 처리
         signal.signal(signal.SIGTERM, _handle_stop)
@@ -481,27 +556,20 @@ class GalleryCrawler:
 
         return False
 
-    def download_post_images(self, post_url: str, headers: Dict[str, str]) -> int:
+    def download_post_images(self, post_url: str, post_id: str, headers: Dict[str, str],
+                             downloader: ImageDownloader) -> Optional[int]:
         """
         게시글의 첨부 이미지 다운로드 (갤러리 대문 이미지 제외)
-        origin_src.py의 image_download 함수 기반
-
-        Args:
-            post_url: 게시글 URL
-            headers: 요청 헤더
 
         Returns:
-            다운로드한 이미지 수
+            다운로드한 이미지 수. 게시글 페이지 로딩 실패 시 None (처리 완료로 기록하지 않음)
         """
         try:
             response = BotBlockBypass.safe_request(post_url, headers)
             if not response:
-                return 0
+                return None
 
             soup = BeautifulSoup(response.text, 'html.parser')
-
-            # 게시글 ID 추출
-            post_id = post_url.split('no=')[-1].split('&')[0] if 'no=' in post_url else 'unknown'
 
             # 첨부 이미지 목록 (갤러리 대문 제외)
             # div.appending_file_box는 본문 첨부 이미지만 포함
@@ -525,7 +593,7 @@ class GalleryCrawler:
                 # 약간의 지연 (이미지 다운로드 간)
                 _stop_event.wait(random.uniform(0.5, 2.0))
 
-                if self.downloader.download_image(img_url, post_url, post_id, headers.copy()):
+                if downloader.download_image(img_url, post_url, post_id, headers.copy()):
                     download_count += 1
 
             return download_count
@@ -536,21 +604,47 @@ class GalleryCrawler:
 
     def crawl_once(self) -> Tuple[int, int, int]:
         """
-        1회 크롤링 실행
+        1회 크롤링 실행 (멀티 모드면 갤러리별로 순차 수집)
 
         Returns:
-            (발견한 게시글 수, 다운로드한 이미지 수, 에러 수)
+            (발견한 게시글 수, 다운로드한 이미지 수, 에러 수) 전체 합계
         """
-        logger.info(f"크롤링 시작: {self.base_url}")
+        totals = [0, 0, 0]
+
+        for gallery in self.galleries:
+            if _stop_event.is_set():
+                break
+
+            found, downloaded, errors = self._crawl_gallery(gallery)
+            totals[0] += found
+            totals[1] += downloaded
+            totals[2] += errors
+
+            # 갤러리 간 지연 (멀티 모드)
+            if len(self.galleries) > 1 and not _stop_event.is_set():
+                _stop_event.wait(random.uniform(3.0, 7.0))
+
+        return totals[0], totals[1], totals[2]
+
+    def _crawl_gallery(self, gallery: Gallery) -> Tuple[int, int, int]:
+        """단일 갤러리 1회 수집 (새 게시글만 처리)"""
+        logger.info(f"크롤링 시작: {gallery.base_url}")
 
         headers = BotBlockBypass.get_headers()
-        response = BotBlockBypass.safe_request(self.base_url, headers)
+        response = BotBlockBypass.safe_request(gallery.base_url, headers)
 
         if not response:
-            logger.error("갤러리 목록 페이지 로딩 실패")
+            logger.error(f"갤러리 목록 페이지 로딩 실패: {gallery.id}")
             return 0, 0, 1
 
         soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 첫 수집 시 갤러리명 확인 후 저장 경로(images/<갤러리명>/) 결정
+        if gallery.downloader is None:
+            gallery.name = GalleryParser.extract_name(soup, gallery.id)
+            save_path = os.path.join(Config.IMAGE_SAVE_PATH, gallery.name)
+            gallery.downloader = ImageDownloader(save_path, self.db)
+            logger.info(f"갤러리명: {gallery.name} → 저장 경로: {save_path}")
 
         # 게시글 행(tr) 목록 추출
         post_rows = soup.select("tr.ub-content")
@@ -563,6 +657,7 @@ class GalleryCrawler:
         images_downloaded = 0
         errors = 0
         processed = 0
+        skipped = 0
 
         for row in post_rows:
             if _stop_event.is_set():
@@ -585,24 +680,36 @@ class GalleryCrawler:
 
             posts_found += 1
 
-            # 게시글 URL
             post_url = "https://gall.dcinside.com" + title_cell.get("href")
+            post_id = post_url.split('no=')[-1].split('&')[0] if 'no=' in post_url else 'unknown'
             title = title_cell.text.strip()
+
+            # 이미 처리한 게시글은 건너뜀 (새 게시글만 수집)
+            if post_id != 'unknown' and self.db.is_post_processed(gallery.id, post_id):
+                skipped += 1
+                logger.debug(f"이미 수집한 게시글 건너뜀: {post_id}")
+                continue
 
             logger.info(f"처리 중: {title}")
 
             # 이미지 다운로드
             try:
-                count = self.download_post_images(post_url, headers.copy())
-                images_downloaded += count
+                count = self.download_post_images(post_url, post_id, headers.copy(), gallery.downloader)
             except Exception as e:
                 logger.error(f"게시글 처리 실패: {e}")
-                errors += 1
+                count = None
 
-            # 처리 완료 카운트
+            if count is None:
+                # 페이지 로딩 실패 등 → 처리 완료로 기록하지 않고 다음 사이클에 재시도
+                errors += 1
+                continue
+
+            images_downloaded += count
+            if post_id != 'unknown':
+                self.db.mark_post_processed(gallery.id, post_id)
             processed += 1
 
-            # 최대 처리 수 제한
+            # 최대 처리 수 제한 (새 게시글 기준)
             if processed >= Config.MAX_POSTS_PER_CYCLE:
                 logger.info(f"최대 처리 수 도달 ({Config.MAX_POSTS_PER_CYCLE}개)")
                 break
@@ -610,16 +717,22 @@ class GalleryCrawler:
             # 게시글 간 랜덤 지연 (Bot Block 회피, 종료 신호 시 즉시 중단)
             _stop_event.wait(random.uniform(2.0, 5.0))
 
-        logger.info(f"크롤링 완료: 게시글 {posts_found}개, 이미지 {images_downloaded}개, 에러 {errors}개")
+        logger.info(
+            f"[{gallery.name or gallery.id}] 완료: 새 게시글 {processed}개, "
+            f"이미지 {images_downloaded}개, 건너뜀 {skipped}개, 에러 {errors}개"
+        )
         return posts_found, images_downloaded, errors
 
     def run(self):
         """크롤러 메인 루프"""
         logger.info("=" * 60)
         logger.info("DumpCache 크롤러 시작")
-        logger.info(f"갤러리: {self.gallery_id} ({self.gallery_type})")
+        if Config.MULTI_MODE:
+            logger.info(f"멀티 모드: 갤러리 {len(self.galleries)}개")
+        for g in self.galleries:
+            logger.info(f"  - {g.id} ({g.type})")
         logger.info(f"수집 간격: {Config.CRAWL_INTERVAL}초")
-        logger.info(f"저장 경로: {Config.IMAGE_SAVE_PATH}")
+        logger.info(f"저장 경로: {Config.IMAGE_SAVE_PATH}/<갤러리명>/")
         logger.info("=" * 60)
 
         cycle = 0

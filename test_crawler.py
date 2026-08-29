@@ -13,13 +13,10 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from crawler import BotBlockBypass, GalleryCrawler
+from crawler import BotBlockBypass, GalleryCrawler, Config
 
 # .env 파일 로드
 load_dotenv()
-
-# 환경 변수에서 갤러리 URL 가져오기
-TEST_GALLERY_URL = os.getenv("GALLERY_URL", "")
 
 # crawler.py의 로직을 그대로 재사용 (중복 방지)
 get_headers = BotBlockBypass.get_headers
@@ -42,23 +39,29 @@ def print_subsection(title: str):
 
 
 def run_integrated_test():
-    """통합 검증 테스트 실행"""
+    """통합 검증 테스트 실행 (설정된 모든 갤러리 순회)"""
     print_section_header("🔍 DumpCache 크롤러 통합 검증")
 
-    # 갤러리 URL 확인
-    if not TEST_GALLERY_URL:
+    urls = [u for u in Config.gallery_urls() if u and u != Config._PLACEHOLDER]
+    if not urls:
         print("❌ 오류: GALLERY_URL 환경 변수가 설정되지 않았습니다.")
         print("💡 .env 파일에 GALLERY_URL을 설정해주세요.\n")
         sys.exit(1)
 
-    print(f"\n📌 테스트 갤러리: {TEST_GALLERY_URL}\n")
+    for url in urls:
+        test_gallery(url)
+
+
+def test_gallery(test_gallery_url: str):
+    """단일 갤러리 검증"""
+    print(f"\n📌 테스트 갤러리: {test_gallery_url}\n")
 
     # 갤러리 페이지 가져오기
     headers = get_headers()
 
     try:
         print("⏳ 페이지 로딩 중...")
-        response = requests.get(TEST_GALLERY_URL, headers=headers, timeout=30)
+        response = requests.get(test_gallery_url, headers=headers, timeout=30)
         response.raise_for_status()
         print("✅ 페이지 로딩 성공\n")
     except Exception as e:

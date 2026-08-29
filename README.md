@@ -40,6 +40,11 @@ docker compose logs -f  # v2
 - `GALLERY_URL`: 수집할 갤러리 주소 (전체 URL 복사-붙여넣기)
 - `CRAWL_INTERVAL`: 수집 간격 (초 단위, 기본값: 60)
 
+**여러 갤러리 수집:** `MULTI_MODE=True` + `MULTI_GALLERY_COUNT=2`(또는 `3`) 설정 후
+`GALLERY_URL`, `GALLERY_URL_2`, `GALLERY_URL_3`에 주소를 입력합니다.
+이미지는 `data/images/<갤러리명>/` 하위 폴더에 갤러리별로 분리 저장되며,
+이미 수집한 게시글은 다음 사이클부터 자동으로 건너뜁니다.
+
 ### 방법 2: 저장소 클론 (개발용)
 
 ```bash
@@ -89,6 +94,7 @@ docker compose down     # v2
 DumpCache/
 ├── data/
 │   ├── images/          # 다운로드된 이미지 저장 (볼륨 마운트)
+│   │   └── <갤러리명>/   # 갤러리별 하위 폴더에 분리 저장
 │   └── metadata.db      # 수집 이력 데이터베이스
 ├── .env                 # 환경 설정 파일 (직접 작성)
 ├── default.env.example  # 환경 설정 템플릿
@@ -101,9 +107,14 @@ DumpCache/
 
 | 변수 | 설명 | 예시 |
 |------|------|------|
-| `GALLERY_URL` | 갤러리 주소 (전체 URL) | `https://gall.dcinside.com/board/lists/?id=<갤러리ID>` |
+| `GALLERY_URL` | 갤러리 주소 (단일 모드 / 멀티 모드 1번) | `https://gall.dcinside.com/board/lists/?id=<갤러리ID>` |
+| `MULTI_MODE` | 여러 갤러리 동시 수집 | `False` (기본값) / `True` |
+| `MULTI_GALLERY_COUNT` | 멀티 모드 갤러리 수 | `2` (기본값) 또는 `3` |
+| `GALLERY_URL_2` | 멀티 모드 2번 갤러리 | (멀티 모드일 때 입력) |
+| `GALLERY_URL_3` | 멀티 모드 3번 갤러리 | (`MULTI_GALLERY_COUNT=3`일 때 입력) |
 | `CRAWL_INTERVAL` | 수집 간격 (초) | `60` (1분) |
-| `IMAGE_SAVE_PATH` | 이미지 저장 경로 | `/app/data/images` (기본값) |
+| `MAX_POSTS_PER_CYCLE` | 사이클당 처리할 새 게시글 수 | `10` (기본값) |
+| `IMAGE_SAVE_PATH` | 이미지 저장 경로 (하위에 `<갤러리명>/` 생성) | `/app/data/images` (기본값) |
 | `METADATA_DB_PATH` | 메타데이터 DB 경로 | `/app/data/metadata.db` (기본값) |
 
 ## 🔄 재시작 및 업데이트

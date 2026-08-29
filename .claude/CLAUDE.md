@@ -113,16 +113,23 @@ DumpCache/
     - `posts_found`: 발견한 게시글 수
     - `images_downloaded`: 다운로드한 이미지 수
     - `errors`: 에러 발생 횟수
+  - `processed_posts`: 처리 완료 게시글 (새 게시글만 수집용)
+    - `gallery_id` + `post_id`: 복합 Primary Key
+    - `processed_at`: 처리 시각
 
 ### 7. 환경 변수
 
 | 변수 | 필수 | 기본값 | 설명 |
 |------|------|--------|------|
-| `GALLERY_URL` | ✅ | - | 갤러리 전체 URL |
+| `GALLERY_URL` | ✅ | - | 갤러리 전체 URL (단일 모드 / 멀티 모드 1번) |
+| `MULTI_MODE` | ❌ | False | 여러 갤러리 동시 수집 활성화 |
+| `MULTI_GALLERY_COUNT` | ❌ | 2 | 멀티 모드 갤러리 수 (2 또는 3) |
+| `GALLERY_URL_2` | ❌ | - | 멀티 모드 2번 갤러리 |
+| `GALLERY_URL_3` | ❌ | - | 멀티 모드 3번 갤러리 (`MULTI_GALLERY_COUNT=3`) |
 | `CRAWL_INTERVAL` | ❌ | 60 | 수집 간격 (초) |
-| `IMAGE_SAVE_PATH` | ❌ | /app/data/images | 이미지 저장 경로 |
+| `IMAGE_SAVE_PATH` | ❌ | /app/data/images | 이미지 저장 경로 (하위에 `<갤러리명>/` 생성) |
 | `METADATA_DB_PATH` | ❌ | /app/data/metadata.db | DB 파일 경로 |
-| `MAX_POSTS_PER_CYCLE` | ❌ | 10 | 한 번에 처리할 최대 게시글 수 |
+| `MAX_POSTS_PER_CYCLE` | ❌ | 10 | 한 사이클에 처리할 새 게시글 수 |
 | `DEBUG` | ❌ | False | 디버그 모드 |
 
 ### 8. 개발 워크플로우
