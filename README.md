@@ -14,7 +14,7 @@ curl -L -O https://github.com/HelloJamong/DumpCache/releases/latest/download/doc
 curl -L -O https://github.com/HelloJamong/DumpCache/releases/latest/download/default.env.example
 
 # 또는 특정 버전 다운로드 (버전 확인: https://github.com/HelloJamong/DumpCache/releases)
-# VERSION=v1.0.1
+# VERSION=26.1.0
 # curl -L -O https://github.com/HelloJamong/DumpCache/releases/download/${VERSION}/docker-compose.yml
 # curl -L -O https://github.com/HelloJamong/DumpCache/releases/download/${VERSION}/default.env.example
 
@@ -73,7 +73,7 @@ docker logs -f dumpcache-crawler
 docker pull igor0670/dumpcache:latest
 
 # 특정 버전
-docker pull igor0670/dumpcache:v1.0.0
+docker pull igor0670/dumpcache:26.1.0
 ```
 
 ### 중지
@@ -101,7 +101,7 @@ DumpCache/
 
 | 변수 | 설명 | 예시 |
 |------|------|------|
-| `GALLERY_URL` | 갤러리 주소 (전체 URL) | `https://gall.dcinside.com/board/lists/?id=dcbest` |
+| `GALLERY_URL` | 갤러리 주소 (전체 URL) | `https://gall.dcinside.com/board/lists/?id=<갤러리ID>` |
 | `CRAWL_INTERVAL` | 수집 간격 (초) | `60` (1분) |
 | `IMAGE_SAVE_PATH` | 이미지 저장 경로 | `/app/data/images` (기본값) |
 | `METADATA_DB_PATH` | 메타데이터 DB 경로 | `/app/data/metadata.db` (기본값) |
@@ -203,6 +203,11 @@ docker compose run --rm dumpcache-crawler python test_crawler.py
 ### 다운로드한 이미지가 보이지 않아요
 - `./data/images/` 폴더를 확인하세요
 - 볼륨 마운트가 제대로 되었는지 확인하세요
+
+### `Permission denied` 로그가 나와요
+- 컨테이너는 비루트 사용자(uid 1000)로 실행됩니다. `./data` 디렉토리에 쓰기 권한이 필요합니다.
+- 다른 uid로 생성된 경우: `sudo chown -R 1000:1000 ./data`
+- 또는 `docker-compose.yml` 서비스에 `user: "$(id -u):$(id -g)"` 를 추가하세요
 
 ## 📄 라이선스
 

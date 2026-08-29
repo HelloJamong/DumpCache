@@ -13,95 +13,18 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from crawler import BotBlockBypass, GalleryCrawler
+
 # .env 파일 로드
 load_dotenv()
 
 # 환경 변수에서 갤러리 URL 가져오기
 TEST_GALLERY_URL = os.getenv("GALLERY_URL", "")
 
-
-def get_headers():
-    """Bot Block 회피 헤더"""
-    return {
-        "Connection": "keep-alive",
-        "Cache-Control": "max-age=0",
-        "sec-ch-ua-mobile": "?0",
-        "DNT": "1",
-        "Upgrade-Insecure-Requests": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-User": "?1",
-        "Sec-Fetch-Dest": "document",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
-    }
-
-
-def is_notice_or_ad(row_element) -> bool:
-    """
-    공지사항, 광고, 설문조사 등 제외 대상 여부 확인
-    """
-    if not row_element:
-        return False
-
-    # 1. tr 태그의 class 속성 확인
-    tr_classes = row_element.get('class', [])
-    if isinstance(tr_classes, list):
-        tr_class_str = ' '.join(tr_classes)
-    else:
-        tr_class_str = str(tr_classes)
-
-    # 공지사항/광고를 나타내는 클래스
-    exclude_classes = [
-        'notice',
-        'gall_notice',
-        'ub-content us-post gall_notice',
-        'ad',
-        'gall_ad',
-    ]
-
-    for exclude_class in exclude_classes:
-        if exclude_class in tr_class_str:
-            return True
-
-    # 2. 내부 요소에서 공지/광고 아이콘 확인
-    row_str = str(row_element)
-    exclude_indicators = [
-        "icon_notice",
-        "icon_img icon_notice",
-        "icon_ad",
-        "gall_notice",
-        "concept_notice",
-    ]
-
-    for indicator in exclude_indicators:
-        if indicator in row_str:
-            return True
-
-    # 3. 설문조사 및 특수 게시글 확인 (URL이 javascript:인 경우)
-    title_cell = row_element.select_one("td.gall_tit > a:nth-child(1)")
-    if title_cell:
-        href = title_cell.get("href", "")
-        if href.startswith("javascript:") or not href or href == "#":
-            return True
-
-    return False
-
-
-def has_media(element) -> bool:
-    """이미지/영상 포함 여부 확인"""
-    element_str = str(element)
-
-    media_indicators = [
-        "icon_pic",                 # 이미지
-        "icon_img icon_recomimg",   # 추천 이미지
-        "icon_img icon_btimebest",  # 베스트 이미지
-        "icon_movie",               # 동영상
-    ]
-
-    return any(indicator in element_str for indicator in media_indicators)
+# crawler.py의 로직을 그대로 재사용 (중복 방지)
+get_headers = BotBlockBypass.get_headers
+is_notice_or_ad = GalleryCrawler.is_notice_or_ad
+has_media = GalleryCrawler.has_media
 
 
 def print_section_header(title: str):

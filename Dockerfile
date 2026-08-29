@@ -4,12 +4,6 @@ FROM python:3.11-slim
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# 시스템 패키지 업데이트 및 필요한 패키지 설치
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
 # requirements.txt 복사 및 의존성 설치
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -18,11 +12,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY crawler.py .
 COPY test_crawler.py .
 
-# data 디렉토리 생성
-RUN mkdir -p /app/data/images
+# 비루트 사용자 생성 (uid 1000) 및 data 디렉토리 소유권 부여
+# 볼륨 마운트 시 호스트의 data 디렉토리도 uid 1000이 쓸 수 있어야 함
+RUN useradd --create-home --uid 1000 app \
+    && mkdir -p /app/data/images \
+    && chown -R app:app /app
 
 # 환경 변수 설정 (기본값)
 ENV PYTHONUNBUFFERED=1
+
+USER app
 
 # 크롤러 실행
 CMD ["python", "crawler.py"]

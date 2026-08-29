@@ -1,5 +1,32 @@
 # Changelog
 
+> 버전 형식: `YY.메이저.마이너` (연도 두 자리 · 기능 추가 시 메이저 · 버그/내부 수정 시 마이너).
+> 태그명은 버전과 동일하며 `v` 접두사를 붙이지 않는다.
+
+## [26.1.0] - 2026-08-29
+
+### Added
+- 컨테이너를 비루트 사용자(uid 1000)로 실행
+- `SIGTERM`/`SIGINT` 처리 — `docker compose down` 시 진행 중인 사이클만 마치고 안전하게 종료
+  - `docker-compose.yml`에 `stop_grace_period: 30s` 추가
+
+### Changed
+- 버전 체계를 `YY.메이저.마이너` 형식으로 전환
+  - git 태그에서 `v` 접두사 제거 (`v1.0.2` → `26.1.0`)
+  - 릴리즈 워크플로우 태그 트리거·버전 추출 로직 수정
+  - README 버전 예시 및 이미지 pull 명령 갱신
+- 미사용 의존성 제거: `lxml`, `Pillow`, `pytz`
+  - HTML 파싱은 표준 `html.parser`, DB는 내장 `sqlite3` 사용
+  - Dockerfile에서 불필요한 `gcc` 빌드 패키지 설치 제거 (이미지 크기 축소)
+- `test_crawler.py`가 `crawler.py`의 헤더·필터 로직을 재사용하도록 변경 (중복 코드 제거)
+- README 환경 변수 예시를 placeholder로 교체 (특정 갤러리 ID 노출 제거)
+- 릴리즈 워크플로우 액션 버전 상향: `docker/build-push-action@v5→v6`, `softprops/action-gh-release@v1→v2`
+
+### Fixed
+- 첨부 이미지가 없거나 전부 중복인 정상 게시글을 크롤링 에러로 집계하던 문제 수정
+- 이미지 URL의 쿼리 파라미터(`&...`)가 저장 파일명에 포함될 수 있던 문제 수정
+- 릴리즈 노트 추출 `awk` 스크립트가 빈 문자열을 반환하던 문제 수정
+
 ## [1.0.2] - 2026-03-15
 
 ### Changed
@@ -103,6 +130,7 @@
 - **Docker Hub**: https://hub.docker.com/r/igor0670/dumpcache
 - **Latest Release**: https://github.com/HelloJamong/DumpCache/releases/latest
 
+[26.1.0]: https://github.com/HelloJamong/DumpCache/releases/tag/26.1.0
 [1.0.2]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.2
 [1.0.1]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.1
 [1.0.0]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.0

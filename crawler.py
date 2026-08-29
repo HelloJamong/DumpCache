@@ -5,11 +5,12 @@ DumpCache - Community Gallery Image Crawler
 
 import os
 import sys
-import time
 import random
+import signal
 import hashlib
 import sqlite3
 import logging
+import threading
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 from typing import Tuple, Optional, List, Dict
@@ -28,6 +29,16 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# 종료 신호 플래그. set되면 대기/재시도 루프가 즉시 중단된다.
+# ponytail: 단일 프로세스 데몬이라 모듈 전역 플래그로 충분
+_stop_event = threading.Event()
+
+
+def _handle_stop(signum, frame):
+    """SIGTERM(docker stop)/SIGINT(Ctrl-C) 수신 시 진행 중인 작업만 마치고 중지"""
+    logger.info(f"종료 신호({signal.Signals(signum).name}) 수신 - 안전하게 중지합니다.")
+    _stop_event.set()
 
 
 class Config:
@@ -80,7 +91,7 @@ class BotBlockBypass:
     @staticmethod
     def random_delay(base_interval: int = 60, variance: int = 10):
         """
-        랜덤 지연으로 패턴 탐지 회피
+        랜덤 지연으로 패턴 탐지 회피 (종료 신호 시 즉시 중단)
 
         Args:
             base_interval: 기본 대기 시간 (초)
@@ -89,7 +100,7 @@ class BotBlockBypass:
         delay = base_interval + random.randint(-variance, variance)
         delay = max(1, delay)  # 최소 1초
         logger.info(f"다음 수집까지 {delay}초 대기...")
-        time.sleep(delay)
+        _stop_event.wait(delay)
 
     @staticmethod
     def safe_request(url: str, headers: Dict[str, str], max_retries: int = 3) -> Optional[requests.Response]:
@@ -105,6 +116,8 @@ class BotBlockBypass:
             Response 객체 또는 None
         """
         for attempt in range(max_retries):
+            if _stop_event.is_set():
+                return None
             try:
                 response = requests.get(url, headers=headers, timeout=30)
 
@@ -112,7 +125,8 @@ class BotBlockBypass:
                 if response.status_code == 429:
                     wait_time = (2 ** attempt) * 60  # 지수 백오프
                     logger.warning(f"HTTP 429 감지. {wait_time}초 대기 후 재시도...")
-                    time.sleep(wait_time)
+                    if _stop_event.wait(wait_time):
+                        return None
                     continue
 
                 response.raise_for_status()
@@ -121,7 +135,8 @@ class BotBlockBypass:
             except requests.exceptions.RequestException as e:
                 logger.warning(f"요청 실패 (시도 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    time.sleep((attempt + 1) * 5)  # 점진적 대기
+                    if _stop_event.wait((attempt + 1) * 5):  # 점진적 대기
+                        return None
                 else:
                     logger.error(f"최대 재시도 횟수 초과: {url}")
                     return None
@@ -322,7 +337,7 @@ class ImageDownloader:
 
             # 파일명 생성 (URL에서 추출)
             if 'no=' in img_url:
-                base_name = img_url.split('no=')[-1]
+                base_name = img_url.split('no=')[-1].split('&')[0]
             else:
                 base_name = img_url.split('/')[-1].split('?')[0]
 
@@ -377,6 +392,10 @@ class GalleryCrawler:
         self.gallery_type, self.gallery_id, self.base_url = GalleryParser.parse_url(Config.GALLERY_URL)
         self.db = Database(Config.METADATA_DB_PATH)
         self.downloader = ImageDownloader(Config.IMAGE_SAVE_PATH, self.db)
+
+        # 종료 신호(SIGTERM: docker stop, SIGINT: Ctrl-C) 처리
+        signal.signal(signal.SIGTERM, _handle_stop)
+        signal.signal(signal.SIGINT, _handle_stop)
 
     @staticmethod
     def has_media(element) -> bool:
@@ -494,6 +513,9 @@ class GalleryCrawler:
 
             download_count = 0
             for li in image_elements:
+                if _stop_event.is_set():
+                    break
+
                 img_tag = li.find('a', href=True)
                 if not img_tag:
                     continue
@@ -501,7 +523,7 @@ class GalleryCrawler:
                 img_url = img_tag['href']
 
                 # 약간의 지연 (이미지 다운로드 간)
-                time.sleep(random.uniform(0.5, 2.0))
+                _stop_event.wait(random.uniform(0.5, 2.0))
 
                 if self.downloader.download_image(img_url, post_url, post_id, headers.copy()):
                     download_count += 1
@@ -543,6 +565,9 @@ class GalleryCrawler:
         processed = 0
 
         for row in post_rows:
+            if _stop_event.is_set():
+                break
+
             # 공지사항/광고 제외 (개선된 감지 로직)
             if self.is_notice_or_ad(row):
                 logger.debug("공지사항/광고 제외")
@@ -570,9 +595,6 @@ class GalleryCrawler:
             try:
                 count = self.download_post_images(post_url, headers.copy())
                 images_downloaded += count
-
-                if count == 0:
-                    errors += 1
             except Exception as e:
                 logger.error(f"게시글 처리 실패: {e}")
                 errors += 1
@@ -585,8 +607,8 @@ class GalleryCrawler:
                 logger.info(f"최대 처리 수 도달 ({Config.MAX_POSTS_PER_CYCLE}개)")
                 break
 
-            # 게시글 간 랜덤 지연 (Bot Block 회피)
-            time.sleep(random.uniform(2.0, 5.0))
+            # 게시글 간 랜덤 지연 (Bot Block 회피, 종료 신호 시 즉시 중단)
+            _stop_event.wait(random.uniform(2.0, 5.0))
 
         logger.info(f"크롤링 완료: 게시글 {posts_found}개, 이미지 {images_downloaded}개, 에러 {errors}개")
         return posts_found, images_downloaded, errors
@@ -602,7 +624,7 @@ class GalleryCrawler:
 
         cycle = 0
 
-        while True:
+        while not _stop_event.is_set():
             cycle += 1
             logger.info(f"\n{'=' * 60}")
             logger.info(f"수집 사이클 #{cycle}")
@@ -614,15 +636,16 @@ class GalleryCrawler:
                 # 크롤링 이력 저장
                 self.db.save_crawl_history(posts_found, images_downloaded, errors)
 
-            except KeyboardInterrupt:
-                logger.info("\n사용자에 의해 중지되었습니다.")
-                break
             except Exception as e:
                 logger.error(f"예상치 못한 오류: {e}", exc_info=True)
-                errors += 1
 
-            # 다음 수집까지 대기 (랜덤 지연)
+            if _stop_event.is_set():
+                break
+
+            # 다음 수집까지 대기 (랜덤 지연, 종료 신호 시 즉시 중단)
             BotBlockBypass.random_delay(Config.CRAWL_INTERVAL, variance=10)
+
+        logger.info("크롤러를 종료합니다.")
 
 
 def main():
@@ -630,6 +653,8 @@ def main():
     try:
         crawler = GalleryCrawler()
         crawler.run()
+    except KeyboardInterrupt:
+        logger.info("사용자에 의해 중지되었습니다.")
     except Exception as e:
         logger.error(f"크롤러 초기화 실패: {e}", exc_info=True)
         sys.exit(1)

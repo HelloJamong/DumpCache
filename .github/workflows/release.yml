@@ -3,7 +3,7 @@ name: Release and Deploy
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - '[0-9]*.[0-9]*.[0-9]*'
 
 permissions:
   contents: write
@@ -20,23 +20,22 @@ jobs:
       - name: Extract version from tag
         id: get_version
         run: |
-          # v1.0.0 -> 1.0.0
-          VERSION=${GITHUB_REF#refs/tags/v}
+          # 태그명 == 버전 (예: 26.1.0), 접두사 없음
+          VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract release notes from CHANGELOG
         id: changelog
         run: |
           VERSION=${{ steps.get_version.outputs.version }}
 
-          # CHANGELOG.md에서 해당 버전의 내용 추출
-          # ## [1.0.0] 섹션부터 다음 ## 섹션 전까지 추출
-          RELEASE_NOTES=$(awk '/^## \['"$VERSION"'\]/, /^## \[/ {
-            if (/^## \[/ && !/^## \['"$VERSION"'\]/) exit;
-            if (/^## \['"$VERSION"'\]/) { found=1; next }
-            if (found) print
-          }' CHANGELOG.md)
+          # CHANGELOG.md에서 해당 버전 헤더 다음 줄부터 다음 "## [" 헤더 전까지 추출
+          RELEASE_NOTES=$(awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md)
 
           # GitHub Actions 멀티라인 출력
           echo "notes<<EOF" >> $GITHUB_OUTPUT
@@ -53,7 +52,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -66,7 +65,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.tag }}
           name: Release ${{ steps.get_version.outputs.tag }}
