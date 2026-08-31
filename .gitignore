@@ -67,3 +67,6 @@ logs/
 .coverage
 htmlcov/
 .tox/
+
+# Local AI assistant / agent state
+.omc/
