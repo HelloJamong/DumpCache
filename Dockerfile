@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 애플리케이션 소스 복사
 COPY crawler.py .
 COPY test_crawler.py .
+COPY test_request_diagnostics.py .
 
 # 비루트 사용자 생성 (uid 1000) 및 data 디렉토리 소유권 부여
 # 볼륨 마운트 시 호스트의 data 디렉토리도 uid 1000이 쓸 수 있어야 함

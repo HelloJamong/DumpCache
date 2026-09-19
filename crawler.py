@@ -12,8 +12,9 @@ import hashlib
 import sqlite3
 import logging
 import threading
+import time
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, parse_qsl, urlencode, urlunparse
 from typing import Tuple, Optional, List, Dict
 
 import requests
@@ -25,7 +26,7 @@ load_dotenv()
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG if os.getenv('DEBUG', 'False').lower() == 'true' else logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -54,6 +55,7 @@ class Config:
     METADATA_DB_PATH = os.getenv('METADATA_DB_PATH', '/app/data/metadata.db')
     MAX_POSTS_PER_CYCLE = int(os.getenv('MAX_POSTS_PER_CYCLE', '10'))
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+    HTTP_DIAGNOSTICS = os.getenv('HTTP_DIAGNOSTICS', 'True').lower() == 'true'
 
     _PLACEHOLDER = '갤러리 주소 입력'
 
@@ -81,6 +83,19 @@ class Config:
 
 class BotBlockBypass:
     """Bot Block 회피를 위한 헤더 및 요청 관리"""
+
+    _SENSITIVE_QUERY_KEYS = {
+        'access_token', 'api_key', 'apikey', 'auth', 'key', 'password',
+        'secret', 'session', 'sig', 'signature', 'token',
+    }
+    _BLOCK_MARKERS = {
+        'access-denied': ('access denied', 'temporarily blocked'),
+        'rate-limited': ('too many requests', 'rate limit'),
+        'challenge': ('captcha', 'verify you are human', 'checking your browser'),
+        'abnormal-access': ('비정상적인 접근', '비정상 접근'),
+        'restricted-access': ('접근이 제한', '서비스 이용이 제한'),
+        'retry-later': ('잠시 후 다시', '요청이 많'),
+    }
 
     @staticmethod
     def get_headers(referer: Optional[str] = None) -> Dict[str, str]:
@@ -124,7 +139,125 @@ class BotBlockBypass:
         _stop_event.wait(delay)
 
     @staticmethod
-    def safe_request(url: str, headers: Dict[str, str], max_retries: int = 3) -> Optional[requests.Response]:
+    def _safe_url(url: str) -> str:
+        """진단 로그에 포함되는 URL의 민감한 쿼리 값을 마스킹한다."""
+        try:
+            parsed = urlparse(url)
+            query = [
+                (key, '<redacted>' if key.lower() in BotBlockBypass._SENSITIVE_QUERY_KEYS else value)
+                for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            ]
+            safe_url = urlunparse(parsed._replace(query=urlencode(query)))
+        except (TypeError, ValueError):
+            safe_url = str(url)
+        return re.sub(r'\s+', ' ', safe_url).strip()[:500]
+
+    @staticmethod
+    def _log_value(value, max_length: int = 200) -> str:
+        """헤더나 오류 값이 로그 행을 깨뜨리지 않도록 정규화한다."""
+        normalized = re.sub(r'\s+', ' ', str(value or '-')).strip()
+        return normalized[:max_length] or '-'
+
+    @staticmethod
+    def get_block_indicators(response: requests.Response) -> List[str]:
+        """상태 코드와 HTML 본문에서 일반적인 차단 징후를 찾는다."""
+        indicators = []
+        content_type = response.headers.get('Content-Type', '').lower()
+        body = response.content
+        body_start = body.lstrip()[:32].lower()
+        is_html = 'html' in content_type or body_start.startswith((b'<!doctype html', b'<html'))
+
+        if response.status_code in (403, 429):
+            indicators.append(f'http-{response.status_code}')
+        if not body:
+            indicators.append('empty-body')
+        if is_html and 0 < len(body) < 2048:
+            indicators.append('small-html')
+
+        if is_html:
+            text = response.text.lower()
+            for name, markers in BotBlockBypass._BLOCK_MARKERS.items():
+                if any(marker in text for marker in markers):
+                    indicators.append(name)
+
+        return indicators
+
+    @staticmethod
+    def response_summary(
+        response: requests.Response,
+        request_kind: str,
+        attempt: Optional[int] = None,
+        max_retries: int = 3,
+        elapsed_ms: Optional[int] = None,
+    ) -> str:
+        """민감한 헤더와 본문을 제외한 HTTP 응답 진단 요약을 생성한다."""
+        body = response.content
+        body_hash = hashlib.sha256(body).hexdigest()[:16]
+        attempt = attempt or getattr(response, '_dumpcache_attempt', 1)
+        if elapsed_ms is None:
+            elapsed_ms = getattr(response, '_dumpcache_elapsed_ms', None)
+        if elapsed_ms is None:
+            response_elapsed = getattr(response, 'elapsed', None)
+            elapsed_ms = (
+                round(response_elapsed.total_seconds() * 1000)
+                if response_elapsed is not None else -1
+            )
+
+        content_type = BotBlockBypass._log_value(response.headers.get('Content-Type'))
+        server = BotBlockBypass._log_value(response.headers.get('Server'))
+        retry_after = BotBlockBypass._log_value(response.headers.get('Retry-After'))
+        final_url = BotBlockBypass._safe_url(response.url)
+
+        return (
+            f"kind={request_kind} attempt={attempt}/{max_retries} "
+            f"status={response.status_code} elapsed_ms={elapsed_ms} bytes={len(body)} "
+            f"content_type={content_type} redirects={len(response.history)} "
+            f"server={server} retry_after={retry_after} "
+            f"body_sha256={body_hash} final_url={final_url}"
+        )
+
+    @staticmethod
+    def _log_response(
+        response: requests.Response,
+        request_kind: str,
+        attempt: int,
+        max_retries: int,
+        elapsed_ms: int,
+    ) -> None:
+        """정상·재시도·차단 의심 응답을 일관된 형식으로 기록한다."""
+        summary = BotBlockBypass.response_summary(
+            response, request_kind, attempt, max_retries, elapsed_ms
+        )
+        indicators = BotBlockBypass.get_block_indicators(response)
+        strong_indicators = set(indicators) - {'empty-body', 'small-html'}
+        block_suspected = (
+            response.status_code in (403, 429)
+            or bool(strong_indicators)
+            or (response.status_code < 400 and bool(indicators))
+        )
+
+        if block_suspected:
+            logger.warning(
+                "HTTP 차단 의심 응답: %s indicators=%s",
+                summary,
+                ','.join(indicators),
+            )
+        elif response.status_code >= 400:
+            logger.warning("HTTP 오류 응답: %s", summary)
+        elif attempt > 1:
+            logger.info("HTTP 재시도 성공: %s", summary)
+        elif Config.HTTP_DIAGNOSTICS:
+            logger.info("HTTP 응답: %s", summary)
+        else:
+            logger.debug("HTTP 응답: %s", summary)
+
+    @staticmethod
+    def safe_request(
+        url: str,
+        headers: Dict[str, str],
+        max_retries: int = 3,
+        request_kind: str = 'http',
+    ) -> Optional[requests.Response]:
         """
         재시도 로직이 포함된 안전한 HTTP 요청
 
@@ -136,30 +269,73 @@ class BotBlockBypass:
         Returns:
             Response 객체 또는 None
         """
-        for attempt in range(max_retries):
+        for attempt_index in range(max_retries):
             if _stop_event.is_set():
                 return None
+            attempt = attempt_index + 1
+            started_at = time.monotonic()
+            response = None
+            response_logged = False
             try:
                 response = requests.get(url, headers=headers, timeout=30)
+                elapsed_ms = round((time.monotonic() - started_at) * 1000)
+                response._dumpcache_attempt = attempt
+                response._dumpcache_elapsed_ms = elapsed_ms
 
                 # HTTP 429 (Too Many Requests) 감지
                 if response.status_code == 429:
-                    wait_time = (2 ** attempt) * 60  # 지수 백오프
-                    logger.warning(f"HTTP 429 감지. {wait_time}초 대기 후 재시도...")
+                    BotBlockBypass._log_response(
+                        response, request_kind, attempt, max_retries, elapsed_ms
+                    )
+                    response_logged = True
+                    wait_time = (2 ** attempt_index) * 60  # 지수 백오프
+                    logger.warning(
+                        "HTTP 429 감지. %s초 대기 후 재시도... kind=%s url=%s",
+                        wait_time,
+                        request_kind,
+                        BotBlockBypass._safe_url(url),
+                    )
                     if _stop_event.wait(wait_time):
                         return None
                     continue
 
+                if response.status_code >= 400:
+                    BotBlockBypass._log_response(
+                        response, request_kind, attempt, max_retries, elapsed_ms
+                    )
+                    response_logged = True
                 response.raise_for_status()
+                BotBlockBypass._log_response(
+                    response, request_kind, attempt, max_retries, elapsed_ms
+                )
                 return response
 
             except requests.exceptions.RequestException as e:
-                logger.warning(f"요청 실패 (시도 {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    if _stop_event.wait((attempt + 1) * 5):  # 점진적 대기
+                elapsed_ms = round((time.monotonic() - started_at) * 1000)
+                if response is not None:
+                    details = BotBlockBypass.response_summary(
+                        response, request_kind, attempt, max_retries, elapsed_ms
+                    )
+                else:
+                    details = (
+                        f"kind={request_kind} attempt={attempt}/{max_retries} "
+                        f"elapsed_ms={elapsed_ms} url={BotBlockBypass._safe_url(url)}"
+                    )
+                if not response_logged:
+                    logger.warning(
+                        "요청 실패: %s error=%s",
+                        details,
+                        BotBlockBypass._log_value(e, 500),
+                    )
+                if attempt < max_retries:
+                    if _stop_event.wait(attempt * 5):  # 점진적 대기
                         return None
                 else:
-                    logger.error(f"최대 재시도 횟수 초과: {url}")
+                    logger.error(
+                        "최대 재시도 횟수 초과: kind=%s url=%s",
+                        request_kind,
+                        BotBlockBypass._safe_url(url),
+                    )
                     return None
 
         return None
@@ -390,7 +566,9 @@ class ImageDownloader:
             headers['Referer'] = post_url
 
             # 이미지 다운로드
-            response = BotBlockBypass.safe_request(img_url, headers)
+            response = BotBlockBypass.safe_request(
+                img_url, headers, request_kind='image'
+            )
             if not response:
                 return False
 
@@ -565,7 +743,9 @@ class GalleryCrawler:
             다운로드한 이미지 수. 게시글 페이지 로딩 실패 시 None (처리 완료로 기록하지 않음)
         """
         try:
-            response = BotBlockBypass.safe_request(post_url, headers)
+            response = BotBlockBypass.safe_request(
+                post_url, headers, request_kind='post'
+            )
             if not response:
                 return None
 
@@ -631,7 +811,9 @@ class GalleryCrawler:
         logger.info(f"크롤링 시작: {gallery.base_url}")
 
         headers = BotBlockBypass.get_headers()
-        response = BotBlockBypass.safe_request(gallery.base_url, headers)
+        response = BotBlockBypass.safe_request(
+            gallery.base_url, headers, request_kind='gallery-list'
+        )
 
         if not response:
             logger.error(f"갤러리 목록 페이지 로딩 실패: {gallery.id}")
@@ -650,7 +832,13 @@ class GalleryCrawler:
         post_rows = soup.select("tr.ub-content")
 
         if not post_rows:
-            logger.warning("게시글을 찾을 수 없습니다. 선택자가 변경되었을 수 있습니다.")
+            indicators = BotBlockBypass.get_block_indicators(response)
+            logger.warning(
+                "게시글을 찾을 수 없습니다. 선택자 변경 또는 차단 응답이 의심됩니다: "
+                "%s indicators=%s",
+                BotBlockBypass.response_summary(response, 'gallery-list'),
+                ','.join(indicators) if indicators else 'none',
+            )
             return 0, 0, 1
 
         posts_found = 0
@@ -732,6 +920,9 @@ class GalleryCrawler:
         for g in self.galleries:
             logger.info(f"  - {g.id} ({g.type})")
         logger.info(f"수집 간격: {Config.CRAWL_INTERVAL}초")
+        logger.info(
+            f"HTTP 응답 진단 로그: {'활성화' if Config.HTTP_DIAGNOSTICS else '비활성화'}"
+        )
         logger.info(f"저장 경로: {Config.IMAGE_SAVE_PATH}/<갤러리명>/")
         logger.info("=" * 60)
 

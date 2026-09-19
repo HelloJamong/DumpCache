@@ -116,6 +116,8 @@ DumpCache/
 | `MAX_POSTS_PER_CYCLE` | 사이클당 처리할 새 게시글 수 | `10` (기본값) |
 | `IMAGE_SAVE_PATH` | 이미지 저장 경로 (하위에 `<갤러리명>/` 생성) | `/app/data/images` (기본값) |
 | `METADATA_DB_PATH` | 메타데이터 DB 경로 | `/app/data/metadata.db` (기본값) |
+| `HTTP_DIAGNOSTICS` | HTTP 응답 진단 로그 기록 | `True` (기본값) / `False` |
+| `DEBUG` | 디버그 로그 기록 | `False` (기본값) / `True` |
 
 ## 🔄 재시작 및 업데이트
 
@@ -168,6 +170,22 @@ docker compose logs -f dumpcache-crawler     # v2
 # docker-compose logs -f dumpcache-crawler   # v1
 ```
 
+`HTTP_DIAGNOSTICS=True`이면 각 요청에 다음 정보가 기록됩니다.
+
+- 요청 종류(`gallery-list`, `post`, `image`)와 재시도 횟수
+- HTTP 상태 코드, 응답 시간, 응답 크기
+- Content-Type, 서버 헤더, Retry-After
+- 리다이렉트 횟수와 최종 URL
+- 본문 원문 대신 비교 가능한 SHA-256 축약 해시
+- 빈 응답, 비정상적으로 작은 HTML, 일반적인 접근 제한 문구
+
+쿠키, 요청 헤더, 응답 본문 원문은 기록하지 않으며 토큰 등 민감한 쿼리 값은 마스킹합니다.
+차단 의심 로그만 확인하려면 다음 명령을 사용합니다.
+
+```bash
+docker compose logs --since 24h --no-color dumpcache-crawler 2>&1 | grep -Ei '차단 의심|HTTP 429|HTTP 재시도|요청 실패|최대 재시도|게시글을 찾을 수 없습니다'
+```
+
 ## 🛑 중지 및 삭제
 
 ```bash
@@ -191,6 +209,9 @@ docker compose down -v           # v2
 ```bash
 # 통합 검증 테스트 실행
 docker compose run --rm dumpcache-crawler python test_crawler.py
+
+# HTTP 진단 로그 단위 테스트
+docker compose run --rm dumpcache-crawler python -m unittest -v test_request_diagnostics.py
 ```
 
 **검증 항목:**
