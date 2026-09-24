@@ -84,6 +84,8 @@ class Config:
 class BotBlockBypass:
     """Bot Block 회피를 위한 헤더 및 요청 관리"""
 
+    block_detected = False
+
     _SENSITIVE_QUERY_KEYS = {
         'access_token', 'api_key', 'apikey', 'auth', 'key', 'password',
         'secret', 'session', 'sig', 'signature', 'token',
@@ -237,6 +239,7 @@ class BotBlockBypass:
         )
 
         if block_suspected:
+            BotBlockBypass.block_detected = True
             logger.warning(
                 "HTTP 차단 의심 응답: %s indicators=%s",
                 summary,
@@ -927,9 +930,11 @@ class GalleryCrawler:
         logger.info("=" * 60)
 
         cycle = 0
+        interval = Config.CRAWL_INTERVAL
 
         while not _stop_event.is_set():
             cycle += 1
+            BotBlockBypass.block_detected = False
             logger.info(f"\n{'=' * 60}")
             logger.info(f"수집 사이클 #{cycle}")
             logger.info(f"{'=' * 60}")
@@ -946,8 +951,21 @@ class GalleryCrawler:
             if _stop_event.is_set():
                 break
 
-            # 다음 수집까지 대기 (랜덤 지연, 종료 신호 시 즉시 중단)
-            BotBlockBypass.random_delay(Config.CRAWL_INTERVAL, variance=10)
+            if BotBlockBypass.block_detected:
+                interval += 30
+                logger.warning(
+                    f"차단 의심 응답 감지 - 다음 수집 간격을 {interval}초로 늘립니다."
+                )
+            else:
+                if interval != Config.CRAWL_INTERVAL:
+                    logger.info(
+                        f"차단 미감지 - 수집 간격을 기본값 "
+                        f"{Config.CRAWL_INTERVAL}초로 복구합니다."
+                    )
+                interval = Config.CRAWL_INTERVAL
+
+            # 다음 수집까지 대기 (설정된 간격 그대로, 종료 신호 시 즉시 중단)
+            BotBlockBypass.random_delay(interval, variance=0)
 
         logger.info("크롤러를 종료합니다.")
 

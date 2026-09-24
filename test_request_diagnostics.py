@@ -3,11 +3,11 @@
 
 import unittest
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import requests
 
-from crawler import BotBlockBypass, Config, _stop_event
+from crawler import BotBlockBypass, Config, GalleryCrawler, _stop_event
 
 
 def make_response(
@@ -34,12 +34,52 @@ def make_response(
 class RequestDiagnosticsTests(unittest.TestCase):
     def setUp(self):
         _stop_event.clear()
+        BotBlockBypass.block_detected = False
         self.original_http_diagnostics = Config.HTTP_DIAGNOSTICS
+        self.original_crawl_interval = Config.CRAWL_INTERVAL
+        self.original_multi_mode = Config.MULTI_MODE
         Config.HTTP_DIAGNOSTICS = True
 
     def tearDown(self):
         Config.HTTP_DIAGNOSTICS = self.original_http_diagnostics
+        Config.CRAWL_INTERVAL = self.original_crawl_interval
+        Config.MULTI_MODE = self.original_multi_mode
+        BotBlockBypass.block_detected = False
         _stop_event.clear()
+
+    def test_block_response_sets_cycle_flag(self):
+        response = make_response(200, b"")
+
+        BotBlockBypass._log_response(response, "gallery-list", 1, 3, 123)
+
+        self.assertTrue(BotBlockBypass.block_detected)
+
+    def test_cycle_interval_backs_off_and_resets_to_env_value(self):
+        Config.CRAWL_INTERVAL = 60
+        Config.MULTI_MODE = False
+        crawler = GalleryCrawler.__new__(GalleryCrawler)
+        crawler.galleries = []
+        crawler.db = Mock()
+        cycle_blocks = iter((True, True, False))
+
+        def crawl_once():
+            BotBlockBypass.block_detected = next(cycle_blocks)
+            return 0, 0, 1
+
+        delays = []
+
+        def stop_after_three_delays(interval, variance=10):
+            delays.append((interval, variance))
+            if len(delays) == 3:
+                _stop_event.set()
+            return False
+
+        with patch.object(crawler, "crawl_once", side_effect=crawl_once), patch.object(
+            BotBlockBypass, "random_delay", side_effect=stop_after_three_delays
+        ):
+            crawler.run()
+
+        self.assertEqual(delays, [(90, 0), (120, 0), (60, 0)])
 
     @patch("crawler.requests.get")
     def test_success_log_contains_response_metadata(self, mock_get):

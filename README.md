@@ -112,7 +112,7 @@ DumpCache/
 | `MULTI_GALLERY_COUNT` | 멀티 모드 갤러리 수 | `2` (기본값) 또는 `3` |
 | `GALLERY_URL_2` | 멀티 모드 2번 갤러리 | (멀티 모드일 때 입력) |
 | `GALLERY_URL_3` | 멀티 모드 3번 갤러리 | (`MULTI_GALLERY_COUNT=3`일 때 입력) |
-| `CRAWL_INTERVAL` | 수집 간격 (초) | `60` (1분) |
+| `CRAWL_INTERVAL` | 기본 수집 간격 (초). 차단 의심 응답이 연속되면 다음 주기마다 30초씩 늘리고, 차단 미감지 시 이 값으로 복구 | `60` (1분) |
 | `MAX_POSTS_PER_CYCLE` | 사이클당 처리할 새 게시글 수 | `10` (기본값) |
 | `IMAGE_SAVE_PATH` | 이미지 저장 경로 (하위에 `<갤러리명>/` 생성) | `/app/data/images` (기본값) |
 | `METADATA_DB_PATH` | 메타데이터 DB 경로 | `/app/data/metadata.db` (기본값) |

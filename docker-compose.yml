@@ -21,9 +21,14 @@ services:
     env_file:
       - .env
 
+    # 컨테이너 시간대를 한국 시간으로 설정
+    environment:
+      TZ: Asia/Seoul
+
     # 볼륨 마운트 (호스트:컨테이너)
     volumes:
       - ./data:/app/data
+      - /etc/localtime:/etc/localtime:ro
 
     # 로그 설정
     logging:

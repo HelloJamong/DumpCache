@@ -3,6 +3,13 @@
 > 버전 형식: `YY.메이저.마이너` (연도 두 자리 · 기능 추가 시 메이저 · 버그/내부 수정 시 마이너).
 > 태그명은 버전과 동일하며 `v` 접두사를 붙이지 않는다.
 
+## [26.2.2] - 2026-09-24
+
+### Changed
+- `CRAWL_INTERVAL`을 기본 수집 간격으로 사용하고, 차단 의심 응답이 연속되면 다음 간격을 주기마다 30초씩 증가시키며 차단 미감지 시 기본값으로 복구
+- 수집 간격의 무작위 ±10초 편차를 제거해 설정·백오프 간격을 그대로 적용
+- Docker Compose 컨테이너 시간대를 KST로 설정하고 호스트의 `/etc/localtime`을 마운트
+
 ## [26.2.1] - 2026-09-19
 
 ### Added
@@ -164,6 +171,8 @@
 - **Docker Hub**: https://hub.docker.com/r/igor0670/dumpcache
 - **Latest Release**: https://github.com/HelloJamong/DumpCache/releases/latest
 
+[26.2.2]: https://github.com/HelloJamong/DumpCache/releases/tag/26.2.2
+[26.2.1]: https://github.com/HelloJamong/DumpCache/releases/tag/26.2.1
 [26.2.0]: https://github.com/HelloJamong/DumpCache/releases/tag/26.2.0
 [26.1.0]: https://github.com/HelloJamong/DumpCache/releases/tag/26.1.0
 [1.0.2]: https://github.com/HelloJamong/DumpCache/releases/tag/v1.0.2
